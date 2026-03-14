@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useReducer, useRef } from "react";
+import { createContext, useContext, useReducer } from "react";
 import {
-  chatResponses,
   initialActivity,
   initialChatHistory,
   initialDocuments,
@@ -19,6 +18,8 @@ const initialState = {
   documents: initialDocuments,
   tasks: initialTasks,
   timeRange: "30d",
+  isChatLoading: false,
+  chatError: null,
 };
 
 function reducer(state, action) {
@@ -103,6 +104,16 @@ function reducer(state, action) {
         ...state,
         chatPanelOpen: !state.chatPanelOpen,
       };
+    case "SET_CHAT_LOADING":
+      return {
+        ...state,
+        isChatLoading: action.payload,
+      };
+    case "SET_CHAT_ERROR":
+      return {
+        ...state,
+        chatError: action.payload,
+      };
     default:
       return state;
   }
@@ -110,22 +121,16 @@ function reducer(state, action) {
 
 export function DashboardProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const responseIndexRef = useRef(0);
-  const timeoutIdsRef = useRef([]);
 
-  useEffect(() => {
-    return () => {
-      timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-      timeoutIdsRef.current = [];
-    };
-  }, []);
-
-  const sendMessage = (message) => {
+  const sendMessage = async (message) => {
     const trimmedMessage = message.trim();
 
     if (!trimmedMessage) {
       return;
     }
+
+    // Clear any previous errors
+    dispatch({ type: "SET_CHAT_ERROR", payload: null });
 
     const now = new Date();
     const bossMessage = {
@@ -138,27 +143,79 @@ export function DashboardProvider({ children }) {
     };
 
     dispatch({ type: "ADD_BOSS_MESSAGE", payload: bossMessage });
+    dispatch({ type: "SET_CHAT_LOADING", payload: true });
 
-    const response = chatResponses[responseIndexRef.current % chatResponses.length];
-    responseIndexRef.current += 1;
+    try {
+      // Convert chat history to API format
+      const apiMessages = state.chatHistory
+        .filter((msg) => msg.speaker === "boss" || msg.speaker === "agent")
+        .map((msg) => ({
+          role: msg.speaker === "boss" ? "user" : "assistant",
+          content: msg.text,
+        }));
 
-    const timeoutId = window.setTimeout(() => {
+      // Add the new user message
+      apiMessages.push({
+        role: "user",
+        content: trimmedMessage,
+      });
+
+      // Call the API
+      const response = await fetch("http://localhost:3001/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: apiMessages,
+          model: "llama-3.3-70b-versatile",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
       dispatch({
         type: "ADD_AGENT_MESSAGE",
         payload: {
           id: `agent-${Date.now()}`,
           speaker: "agent",
           label: "CODESYNC AGENT",
-          text: response.text,
-          refs: response.refs,
-          actionTask: response.actionTask,
+          text: data.message,
+          refs: [],
+          actionTask: null,
           schedulerAdded: false,
           isNew: true,
         },
       });
-    }, 700);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      dispatch({
+        type: "SET_CHAT_ERROR",
+        payload: error.message || "Failed to get response from AI",
+      });
 
-    timeoutIdsRef.current.push(timeoutId);
+      // Add error message to chat
+      dispatch({
+        type: "ADD_AGENT_MESSAGE",
+        payload: {
+          id: `agent-error-${Date.now()}`,
+          speaker: "agent",
+          label: "CODESYNC AGENT",
+          text: `Sorry, I encountered an error: ${error.message}. Please make sure the backend server is running.`,
+          refs: [],
+          actionTask: null,
+          schedulerAdded: false,
+          isNew: true,
+        },
+      });
+    } finally {
+      dispatch({ type: "SET_CHAT_LOADING", payload: false });
+    }
   };
 
   const addDocuments = (files, category) => {
