@@ -5,7 +5,7 @@ import { useDashboard } from "../context/DashboardContext";
 function GlobalChatPanel() {
   const [inputValue, setInputValue] = useState("");
   const [recentlyAddedMessageIds, setRecentlyAddedMessageIds] = useState([]);
-  const { addTaskFromMessage, chatHistory, chatPanelOpen, sendMessage, toggleChatPanel } =
+  const { addTaskFromMessage, chatHistory, chatPanelOpen, isChatLoading, sendMessage, toggleChatPanel } =
     useDashboard();
   const messagesRef = useRef(null);
   const timeoutIdsRef = useRef([]);
@@ -104,16 +104,28 @@ function GlobalChatPanel() {
                 </div>
               );
             })}
+
+            {isChatLoading && (
+              <div className="chat-message is-agent">
+                <span className="chat-message__label">CODESYNC AGENT</span>
+                <div className="chat-bubble">
+                  <p style={{ opacity: 0.6 }}>Thinking...</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <form className="chat-rail__input" onSubmit={handleSubmit}>
             <input
+              disabled={isChatLoading}
               onChange={(event) => setInputValue(event.target.value)}
-              placeholder="Ask about sprints, blockers, team capacity..."
+              placeholder={isChatLoading ? "Waiting for response..." : "Ask about sprints, blockers, team capacity..."}
               type="text"
               value={inputValue}
             />
-            <button type="submit">ASK →</button>
+            <button disabled={isChatLoading || !inputValue.trim()} type="submit">
+              {isChatLoading ? "..." : "ASK →"}
+            </button>
           </form>
         </>
       ) : (
