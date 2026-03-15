@@ -5,7 +5,7 @@ function TopBar() {
     <header className="top-bar">
       <div className="top-bar__brand">
         <div className="top-bar__logo">
-          <span className="logo-primary">✳ CODESYNC</span>
+          <span className="logo-primary">✳ ORCHESTRA</span>
           <span className="logo-accent">INSIGHTS</span>
         </div>
         <span className="top-bar__separator" aria-hidden="true" />

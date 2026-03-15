@@ -435,62 +435,7 @@ const responseActionTasks = [
   },
 ];
 
-export const initialChatHistory = [
-  {
-    id: "chat-1",
-    speaker: "boss",
-    label: "BIG BOSS",
-    text: "Are we on track for the Q2 deadline?",
-    refs: [],
-    isNew: false,
-  },
-  {
-    id: "chat-2",
-    speaker: "agent",
-    label: "CODESYNC AGENT",
-    text: "Sprint 2 is 68% complete with 4 days remaining. Auth and Backend are ahead. Database is blocked on schema design. This is the only item at risk for the Q2 milestone.",
-    refs: ["SPRINT 2", "AUTH", "BACKEND", "DATABASE"],
-    actionTask: { ...baseSchedulerTasks[0] },
-    schedulerAdded: true,
-    isNew: false,
-  },
-  {
-    id: "chat-3",
-    speaker: "boss",
-    label: "BIG BOSS",
-    text: "Which dev is most overloaded?",
-    refs: [],
-    isNew: false,
-  },
-  {
-    id: "chat-4",
-    speaker: "agent",
-    label: "CODESYNC AGENT",
-    text: "Alex has the highest active task count at 3 tasks across Sprint 2. Jordan has the lowest completion rate at 45%. No developer is critically overloaded right now.",
-    refs: ["ALEX", "JORDAN", "SPRINT 2"],
-    actionTask: { ...baseSchedulerTasks[2] },
-    schedulerAdded: true,
-    isNew: false,
-  },
-  {
-    id: "chat-5",
-    speaker: "boss",
-    label: "BIG BOSS",
-    text: "What needs my decision this week?",
-    refs: [],
-    isNew: false,
-  },
-  {
-    id: "chat-6",
-    speaker: "agent",
-    label: "CODESYNC AGENT",
-    text: "Two items need executive input: unblock the database schema sync payload contract and confirm Q3 hiring headcount. Both decisions affect downstream planning this week.",
-    refs: ["DATABASE", "Q3 HIRING", "HEADCOUNT"],
-    actionTask: { ...baseSchedulerTasks[1] },
-    schedulerAdded: true,
-    isNew: false,
-  },
-];
+export const initialChatHistory = [];
 
 export const chatResponses = [
   {

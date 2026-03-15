@@ -32,7 +32,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar__identity">
-        <h1>CODESYNC INSIGHTS</h1>
+        <h1>ORCHESTRA INSIGHTS</h1>
         <p>Shipping confidence at a glance.</p>
       </div>
 

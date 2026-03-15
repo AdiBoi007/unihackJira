@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer } from "react";
+import { createContext, useContext, useEffect, useReducer, useRef } from "react";
 import {
   initialActivity,
   initialChatHistory,
@@ -7,19 +7,67 @@ import {
   navItems,
   taskStatusOrder,
 } from "../data/mockData";
+import { getBigBossResponse } from "../data/bigBossResponses";
 
 const DashboardContext = createContext(null);
+
+function buildActionTask(matchedResponse) {
+  if (!matchedResponse.hasAction) {
+    return null;
+  }
+
+  const lowerResponse = matchedResponse.response.toLowerCase();
+
+  if (lowerResponse.includes("schema sync payload contract")) {
+    return {
+      assignee: "Casey",
+      priority: "HIGH",
+      sprintRef: "Sprint 2",
+      status: "PENDING",
+      title: "Unblock database schema contract",
+    };
+  }
+
+  if (lowerResponse.includes("move the new feature to sprint 3")) {
+    return {
+      assignee: "Jordan",
+      priority: "MED",
+      sprintRef: "Sprint 3",
+      status: "ASSIGNED",
+      title: "Move Slack login scope to Sprint 3",
+    };
+  }
+
+  if (lowerResponse.includes("senior backend engineer")) {
+    return {
+      assignee: "Sam",
+      priority: "HIGH",
+      sprintRef: null,
+      status: "IN REVIEW",
+      title: "Open senior backend hiring approval",
+    };
+  }
+
+  return {
+    assignee: "Casey",
+    priority: "HIGH",
+    sprintRef: "Sprint 2",
+    status: "PENDING",
+    title: "Resolve executive blocker",
+  };
+}
 
 const initialState = {
   activeSection: navItems[0].id,
   activity: initialActivity,
-  chatHistory: initialChatHistory,
+  bbChatHistory: initialChatHistory,
+  bbIsTyping: false,
+  bbThinkingStage: 0,
+  chatHistory: [],
   chatPanelOpen: true,
   documents: initialDocuments,
   tasks: initialTasks,
   timeRange: "30d",
-  isChatLoading: false,
-  chatError: null,
 };
 
 function reducer(state, action) {
@@ -34,21 +82,27 @@ function reducer(state, action) {
         ...state,
         timeRange: action.payload,
       };
-    case "ADD_BOSS_MESSAGE":
+    case "ADD_BB_MESSAGE":
       return {
         ...state,
+        bbChatHistory: [
+          ...state.bbChatHistory.map((message) => ({ ...message, isNew: false })),
+          action.payload,
+        ],
         chatHistory: [
           ...state.chatHistory.map((message) => ({ ...message, isNew: false })),
           action.payload,
         ],
       };
-    case "ADD_AGENT_MESSAGE":
+    case "SET_BB_TYPING":
       return {
         ...state,
-        chatHistory: [
-          ...state.chatHistory.map((message) => ({ ...message, isNew: false })),
-          action.payload,
-        ],
+        bbIsTyping: action.payload,
+      };
+    case "SET_BB_THINKING_STAGE":
+      return {
+        ...state,
+        bbThinkingStage: action.payload,
       };
     case "ADD_DOCUMENTS":
       return {
@@ -65,6 +119,11 @@ function reducer(state, action) {
           action.payload.activity,
           ...state.activity.map((item) => ({ ...item, isNew: false })),
         ].slice(0, 12),
+        bbChatHistory: state.bbChatHistory.map((message) =>
+          message.id === action.payload.messageId
+            ? { ...message, schedulerAdded: true, isNew: false }
+            : message,
+        ),
         chatHistory: state.chatHistory.map((message) =>
           message.id === action.payload.messageId
             ? { ...message, schedulerAdded: true, isNew: false }
@@ -104,16 +163,6 @@ function reducer(state, action) {
         ...state,
         chatPanelOpen: !state.chatPanelOpen,
       };
-    case "SET_CHAT_LOADING":
-      return {
-        ...state,
-        isChatLoading: action.payload,
-      };
-    case "SET_CHAT_ERROR":
-      return {
-        ...state,
-        chatError: action.payload,
-      };
     default:
       return state;
   }
@@ -121,101 +170,88 @@ function reducer(state, action) {
 
 export function DashboardProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const timeoutIdsRef = useRef([]);
 
-  const sendMessage = async (message) => {
+  useEffect(() => {
+    return () => {
+      timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      timeoutIdsRef.current = [];
+    };
+  }, []);
+
+  const sendMessage = (message) => {
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage) {
+    if (!trimmedMessage || state.bbIsTyping) {
       return;
     }
 
-    // Clear any previous errors
-    dispatch({ type: "SET_CHAT_ERROR", payload: null });
-
     const now = new Date();
     const bossMessage = {
-      id: `boss-${now.getTime()}`,
-      speaker: "boss",
-      label: "BIG BOSS",
-      text: trimmedMessage,
-      refs: [],
+      content: trimmedMessage,
+      id: `bb_u_${now.getTime()}`,
       isNew: true,
+      label: "BIG BOSS",
+      refs: [],
+      role: "user",
+      speaker: "boss",
+      tags: [],
+      text: trimmedMessage,
+      time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
+    const thinkingTime = Math.floor(Math.random() * 2400) + 2800;
 
-    dispatch({ type: "ADD_BOSS_MESSAGE", payload: bossMessage });
-    dispatch({ type: "SET_CHAT_LOADING", payload: true });
+    dispatch({ type: "ADD_BB_MESSAGE", payload: bossMessage });
+    dispatch({ type: "SET_BB_TYPING", payload: true });
+    dispatch({ type: "SET_BB_THINKING_STAGE", payload: 1 });
 
-    try {
-      // Convert chat history to API format
-      const apiMessages = state.chatHistory
-        .filter((msg) => msg.speaker === "boss" || msg.speaker === "agent")
-        .map((msg) => ({
-          role: msg.speaker === "boss" ? "user" : "assistant",
-          content: msg.text,
-        }));
+    const stageTwoTimeoutId = window.setTimeout(() => {
+      dispatch({ type: "SET_BB_THINKING_STAGE", payload: 2 });
+    }, thinkingTime * 0.3);
 
-      // Add the new user message
-      apiMessages.push({
-        role: "user",
-        content: trimmedMessage,
-      });
+    const stageThreeTimeoutId = window.setTimeout(() => {
+      dispatch({ type: "SET_BB_THINKING_STAGE", payload: 3 });
+    }, thinkingTime * 0.65);
 
-      // Call the API
-      const response = await fetch("http://localhost:3001/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: apiMessages,
-          model: "llama-3.3-70b-versatile",
-        }),
-      });
+    const stageFourTimeoutId = window.setTimeout(() => {
+      dispatch({ type: "SET_BB_THINKING_STAGE", payload: 4 });
+    }, thinkingTime * 0.85);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
+    const responseTimeoutId = window.setTimeout(() => {
+      const matchedResponse = getBigBossResponse(trimmedMessage);
+      const responseText = matchedResponse.response;
+      const tags = matchedResponse.tags ?? [];
 
       dispatch({
-        type: "ADD_AGENT_MESSAGE",
+        type: "ADD_BB_MESSAGE",
         payload: {
-          id: `agent-${Date.now()}`,
-          speaker: "agent",
-          label: "CODESYNC AGENT",
-          text: data.message,
-          refs: [],
-          actionTask: null,
-          schedulerAdded: false,
+          actionLabel: matchedResponse.actionLabel ?? null,
+          actionTask: buildActionTask(matchedResponse),
+          content: responseText,
+          hasAction: matchedResponse.hasAction,
+          id: `bb_a_${Date.now()}`,
           isNew: true,
+          label: "ORCHESTRA AGENT",
+          refs: tags,
+          role: "agent",
+          schedulerAdded: false,
+          speaker: "agent",
+          tags,
+          text: responseText,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
-      });
-    } catch (error) {
-      console.error("Error sending message:", error);
-      dispatch({
-        type: "SET_CHAT_ERROR",
-        payload: error.message || "Failed to get response from AI",
       });
 
-      // Add error message to chat
-      dispatch({
-        type: "ADD_AGENT_MESSAGE",
-        payload: {
-          id: `agent-error-${Date.now()}`,
-          speaker: "agent",
-          label: "CODESYNC AGENT",
-          text: `Sorry, I encountered an error: ${error.message}. Please make sure the backend server is running.`,
-          refs: [],
-          actionTask: null,
-          schedulerAdded: false,
-          isNew: true,
-        },
-      });
-    } finally {
-      dispatch({ type: "SET_CHAT_LOADING", payload: false });
-    }
+      dispatch({ type: "SET_BB_TYPING", payload: false });
+      dispatch({ type: "SET_BB_THINKING_STAGE", payload: 0 });
+    }, thinkingTime);
+
+    timeoutIdsRef.current.push(
+      stageTwoTimeoutId,
+      stageThreeTimeoutId,
+      stageFourTimeoutId,
+      responseTimeoutId,
+    );
   };
 
   const addDocuments = (files, category) => {
@@ -250,7 +286,7 @@ export function DashboardProvider({ children }) {
   };
 
   const addTaskFromMessage = (messageId) => {
-    const message = state.chatHistory.find((entry) => entry.id === messageId);
+    const message = state.bbChatHistory.find((entry) => entry.id === messageId);
 
     if (!message?.actionTask || message.schedulerAdded) {
       return;
